@@ -47,9 +47,9 @@ final class CameraService: NSObject, ObservableObject {
 
     // Pre-compiled regex — avoids re-allocating on every frame
     private static let glueRegex: NSRegularExpression? =
-        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})([0-9ILOSB\|]{1,2})(?![A-Z0-9])"#)
+        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z0-9]{2,3})([0-9ILOSB\|]{1,2})(?![A-Z0-9])"#)
     private static let spacedRegex: NSRegularExpression? =
-        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})(?:\s+|[-_:])([0-9ILOSB\|]{1,2})(?![0-9A-Z])"#)
+        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z0-9]{2,3})(?:\s+|[-_:])([0-9ILOSB\|]{1,2})(?![0-9A-Z])"#)
 
     // Center strip of the frame (normalized, Vision origin = bottom-left).
     // Focusing here avoids wasting time on background clutter at the edges.
@@ -193,8 +193,10 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                     let cr = Range(m.range(at: 1), in: text),
                     let nr = Range(m.range(at: 2), in: text)
                 else { continue }
+                let code = normalizeOCRCodeToken(String(text[cr]))
+                guard code.count >= 2, code.count <= 3 else { continue }
                 let number = normalizeOCRNumberToken(String(text[nr]))
-                let id = "\(text[cr])\(number)"
+                let id = "\(code)\(number)"
                 if StickerData.validIDs.contains(id) { return id }
             }
         }
@@ -215,7 +217,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 .filter { !$0.isEmpty }
 
             for i in 0 ..< tokens.count {
-                let token = tokens[i]
+                let token = normalizeOCRCodeToken(tokens[i])
 
                 // Must be 2–3 purely alphabetic uppercase chars to be a sticker code
                 guard (2...3).contains(token.count),
@@ -266,8 +268,10 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 let cr = Range(m.range(at: 1), in: text),
                 let nr = Range(m.range(at: 2), in: text)
             else { continue }
+            let code = normalizeOCRCodeToken(String(text[cr]))
+            guard code.count >= 2, code.count <= 3 else { continue }
             let number = normalizeOCRNumberToken(String(text[nr]))
-            let id = "\(text[cr])\(number)"
+            let id = "\(code)\(number)"
             if StickerData.validIDs.contains(id) { return id }
         }
         return nil
@@ -283,6 +287,18 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
             case "O": return "0"
             case "S": return "5"
             case "B": return "8"
+            default: return ch
+            }
+        })
+    }
+
+    /// Converts common OCR confusions in country codes.
+    /// Example: "CR0" -> "CRO".
+    private func normalizeOCRCodeToken(_ raw: String) -> String {
+        let upper = raw.uppercased()
+        return String(upper.map { ch in
+            switch ch {
+            case "0": return "O"
             default: return ch
             }
         })
