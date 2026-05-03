@@ -48,6 +48,8 @@ final class CameraService: NSObject, ObservableObject {
     // Pre-compiled regex — avoids re-allocating on every frame
     private static let glueRegex: NSRegularExpression? =
         try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})(\d{1,2})(?!\d)"#)
+    private static let spacedRegex: NSRegularExpression? =
+        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})\s*([0-9]{1,2})(?![0-9])"#)
 
     // Center strip of the frame (normalized, Vision origin = bottom-left).
     // Focusing here avoids wasting time on background clutter at the edges.
@@ -170,10 +172,32 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
     // MARK: - Pattern matching
 
     private func findStickerID(in texts: [String]) -> String? {
+        // First, try direct CODE+NUMBER matching per OCR line ("ESP 1", "PAN19", etc.).
+        if let id = findViaLineRegex(in: texts) { return id }
         // Primary strategy: token-based — more resilient to OCR splitting "19" → "1" + "9"
         if let id = findViaTokens(in: texts) { return id }
         // Fallback: regex on the joined string (handles code+number glued without space)
         return findViaRegex(in: texts.joined(separator: " ").uppercased())
+    }
+
+    private func findViaLineRegex(in texts: [String]) -> String? {
+        guard let regex = CameraService.spacedRegex else { return nil }
+
+        for raw in texts {
+            let text = raw.uppercased()
+            let ns = text as NSString
+            let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+
+            for m in matches {
+                guard
+                    let cr = Range(m.range(at: 1), in: text),
+                    let nr = Range(m.range(at: 2), in: text)
+                else { continue }
+                let id = "\(text[cr])\(text[nr])"
+                if StickerData.validIDs.contains(id) { return id }
+            }
+        }
+        return nil
     }
 
     /// Splits each OCR string into whitespace tokens and walks them looking for
