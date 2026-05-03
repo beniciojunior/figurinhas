@@ -299,7 +299,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         return String(upper.map { ch in
             switch ch {
             case "0": return "O"
-            case "1", "L", "|": return "I"
+            case "1", "|": return "I"
             case "5": return "S"
             default: return ch
             }
