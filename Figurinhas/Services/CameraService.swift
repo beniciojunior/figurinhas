@@ -47,7 +47,7 @@ final class CameraService: NSObject, ObservableObject {
 
     // Pre-compiled regex — avoids re-allocating on every frame
     private static let glueRegex: NSRegularExpression? =
-        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})(\d{1,2})(?!\d)"#)
+        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})([0-9ILOSB\|]{1,2})(?![A-Z0-9])"#)
     private static let spacedRegex: NSRegularExpression? =
         try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})(?:\s+|[-_:])([0-9ILOSB\|]{1,2})(?![0-9A-Z])"#)
 
@@ -266,7 +266,8 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 let cr = Range(m.range(at: 1), in: text),
                 let nr = Range(m.range(at: 2), in: text)
             else { continue }
-            let id = "\(text[cr])\(text[nr])"
+            let number = normalizeOCRNumberToken(String(text[nr]))
+            let id = "\(text[cr])\(number)"
             if StickerData.validIDs.contains(id) { return id }
         }
         return nil
