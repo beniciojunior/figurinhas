@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Filter mode
 
@@ -13,6 +14,9 @@ struct CollectionGridView: View {
 
     @EnvironmentObject private var collection: StickerCollection
     @State private var filter: FilterMode = .none
+    @State private var searchText = ""
+    @State private var showExportOptions = false
+    @State private var sharePayload: SharePayload?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 5)
 
@@ -25,6 +29,9 @@ struct CollectionGridView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 10)
                         .padding(.bottom, 6)
+                    searchAndExportBar
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
 
                     if filter != .none {
                         filterBanner
@@ -50,10 +57,47 @@ struct CollectionGridView: View {
             .background(Color(.systemBackground))
             .navigationTitle("Coleção")
             .navigationBarTitleDisplayMode(.large)
+            .confirmationDialog("Exportar figurinhas", isPresented: $showExportOptions, titleVisibility: .visible) {
+                Button("Todas") {
+                    sharePayload = SharePayload(text: buildExportText(repeatedOnly: false))
+                }
+                Button("Repetidas") {
+                    sharePayload = SharePayload(text: buildExportText(repeatedOnly: true))
+                }
+                Button("Cancelar", role: .cancel) {}
+            }
+            .sheet(item: $sharePayload) { payload in
+                ShareSheet(items: [payload.text])
+            }
         }
     }
 
     // MARK: - Stats banner
+
+    private var searchAndExportBar: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Buscar por país, sigla ou número", text: $searchText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+            Button {
+                showExportOptions = true
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 42, height: 42)
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     private var statsBanner: some View {
         HStack(spacing: 10) {
@@ -198,7 +242,7 @@ struct CollectionGridView: View {
     // MARK: - Country row
 
     private func countryRow(_ country: CountrySection, accent: Color) -> some View {
-        let stickersToShow = country.stickers.filter { passes(sticker: $0) }
+        let stickersToShow = country.stickers.filter { passes(sticker: $0, in: country) }
 
         return VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
@@ -238,23 +282,86 @@ struct CollectionGridView: View {
     // MARK: - Helpers
 
     private func passes(sticker: StickerDef) -> Bool {
+        passes(sticker: sticker, in: nil)
+    }
+
+    private func passes(sticker: StickerDef, in country: CountrySection?) -> Bool {
         let c = collection.count(for: sticker.id)
-        switch filter {
-        case .none:       return true
-        case .owned:      return c >= 1
-        case .duplicates: return c > 1
-        case .missing:    return c == 0
+        let filterMatch: Bool = switch filter {
+        case .none:       true
+        case .owned:      c >= 1
+        case .duplicates: c > 1
+        case .missing:    c == 0
         }
+
+        guard filterMatch else { return false }
+        return matchesSearch(sticker: sticker, country: country)
+    }
+
+    private func matchesSearch(sticker: StickerDef, country: CountrySection?) -> Bool {
+        let q = normalizedSearch(searchText)
+        guard !q.isEmpty else { return true }
+
+        var bag = [
+            sticker.code,
+            sticker.number,
+            sticker.display
+        ]
+
+        if let country {
+            bag.append(country.name)
+            bag.append(country.code)
+        }
+
+        return bag
+            .map(normalizedSearch)
+            .contains(where: { $0.contains(q) })
+    }
+
+    private func normalizedSearch(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .replacingOccurrences(of: " ", with: "")
+    }
+
+    private func buildExportText(repeatedOnly: Bool) -> String {
+        let parts = StickerData.groups
+            .flatMap(\.sections)
+            .flatMap { section in
+                section.stickers.compactMap { sticker -> String? in
+                    let c = collection.count(for: sticker.id)
+                    guard c > 0 else { return nil }
+                    if repeatedOnly && c <= 1 { return nil }
+                    return "\(sticker.code) \(sticker.number)"
+                }
+            }
+        return parts.joined(separator: ", ")
+    }
+
+    private func hasVisibleStickers(_ country: CountrySection) -> Bool {
+        country.stickers.contains { passes(sticker: $0, in: country) }
     }
 
     private func visibleSections(in group: StickerGroup) -> [CountrySection] {
-        guard filter != .none else { return group.sections }
-        return group.sections.filter { country in
-            country.stickers.contains { passes(sticker: $0) }
-        }
+        group.sections.filter { hasVisibleStickers($0) }
     }
 
     private func ownedCount(_ group: StickerGroup) -> Int {
         group.sections.flatMap(\.stickers).filter { collection.count(for: $0.id) > 0 }.count
     }
+}
+
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private struct SharePayload: Identifiable {
+    let id = UUID()
+    let text: String
 }
