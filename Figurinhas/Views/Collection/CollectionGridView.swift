@@ -21,6 +21,11 @@ struct CollectionGridView: View {
     @State private var importText = ""
     @State private var importResultMessage = ""
     @State private var showImportResult = false
+    @State private var showVerifyAlert = false
+    @State private var verifyText = ""
+    @State private var verifyResultMessage = ""
+    @State private var verifyMissingExportText = ""
+    @State private var showVerifyResult = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 5)
 
@@ -68,6 +73,12 @@ struct CollectionGridView: View {
                         showImportAlert = true
                     }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Verificar") {
+                        verifyText = ""
+                        showVerifyAlert = true
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showExportOptions = true
@@ -106,6 +117,27 @@ struct CollectionGridView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(importResultMessage)
+            }
+            .alert("Verificar figurinhas", isPresented: $showVerifyAlert) {
+                TextField("Ex.: MEX 4, PAN 1, FWC 00", text: $verifyText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                Button("Cancelar", role: .cancel) {}
+                Button("Verificar") {
+                    verifyFromText(verifyText)
+                }
+            } message: {
+                Text("Cole a lista no mesmo formato da exportação.")
+            }
+            .alert("Resultado da verificação", isPresented: $showVerifyResult) {
+                if !verifyMissingExportText.isEmpty {
+                    Button("Copiar") {
+                        UIPasteboard.general.string = verifyMissingExportText
+                    }
+                }
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(verifyResultMessage)
             }
         }
     }
@@ -371,29 +403,12 @@ struct CollectionGridView: View {
     }
 
     private func importFromText(_ raw: String) {
-        let parts = raw
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
-            .filter { !$0.isEmpty }
-
+        let parts = parseStickerParts(raw)
         var imported = 0
         var ignored = 0
 
         for part in parts {
-            let tokens = part
-                .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-                .map(String.init)
-
-            guard tokens.count >= 2 else {
-                ignored += 1
-                continue
-            }
-
-            let code = tokens[0]
-            let number = normalizeImportedNumber(tokens[1], for: code)
-            let id = "\(code)\(number)"
-
-            guard StickerData.validIDs.contains(id) else {
+            guard let id = normalizedStickerID(fromPart: part) else {
                 ignored += 1
                 continue
             }
@@ -404,6 +419,60 @@ struct CollectionGridView: View {
 
         importResultMessage = "Adicionadas: \(imported) • Ignoradas: \(ignored)"
         showImportResult = true
+    }
+
+    private func verifyFromText(_ raw: String) {
+        let parts = parseStickerParts(raw)
+        var missing: [String] = []
+        var ignored = 0
+
+        for part in parts {
+            guard let id = normalizedStickerID(fromPart: part),
+                  let sticker = StickerData.byID[id]
+            else {
+                ignored += 1
+                continue
+            }
+
+            if collection.count(for: id) == 0 {
+                missing.append("\(sticker.code) \(sticker.number)")
+            }
+        }
+
+        if missing.isEmpty {
+            verifyMissingExportText = ""
+            verifyResultMessage = ignored > 0
+                ? "Você já tem todas da lista válida. Itens ignorados: \(ignored)."
+                : "Você já tem todas as figurinhas da lista."
+        } else {
+            let list = missing.joined(separator: ", ")
+            verifyMissingExportText = list
+            verifyResultMessage = ignored > 0
+                ? "Faltando (\(missing.count)): \(list)\n\nIgnoradas: \(ignored)"
+                : "Faltando (\(missing.count)): \(list)"
+        }
+
+        showVerifyResult = true
+    }
+
+    private func parseStickerParts(_ raw: String) -> [String] {
+        raw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+            .filter { !$0.isEmpty }
+    }
+
+    private func normalizedStickerID(fromPart part: String) -> String? {
+        let tokens = part
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+
+        guard tokens.count >= 2 else { return nil }
+
+        let code = tokens[0]
+        let number = normalizeImportedNumber(tokens[1], for: code)
+        let id = "\(code)\(number)"
+        return StickerData.validIDs.contains(id) ? id : nil
     }
 
     private func normalizeImportedNumber(_ numberRaw: String, for code: String) -> String {
