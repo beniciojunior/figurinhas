@@ -10,6 +10,12 @@ struct ScannerAddView: View {
     @State private var mode: ScannerMode = .add
     @State private var lastScannedID: String? = nil
     @State private var lastWasNoop = false
+    @State private var undoAction: UndoAction? = nil
+
+    private struct UndoAction {
+        let id: String
+        let mode: ScannerMode
+    }
 
     var body: some View {
         NavigationStack {
@@ -115,16 +121,30 @@ struct ScannerAddView: View {
                 Spacer()
 
                 // Limpar button — lets the user re-scan the same sticker
-                Button {
-                    camera.resetLastFound()
-                    withAnimation(.spring(duration: 0.3)) { lastScannedID = nil }
-                } label: {
-                    Text("Limpar")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.orange.opacity(0.18), in: Capsule())
+                VStack(spacing: 8) {
+                    Button {
+                        performUndo()
+                    } label: {
+                        Text("Desfazer")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(undoAction == nil ? .secondary : .teal)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background((undoAction == nil ? Color.gray : Color.teal).opacity(0.18), in: Capsule())
+                    }
+                    .disabled(undoAction == nil)
+
+                    Button {
+                        camera.resetLastFound()
+                        withAnimation(.spring(duration: 0.3)) { lastScannedID = nil }
+                    } label: {
+                        Text("Limpar")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.orange.opacity(0.18), in: Capsule())
+                    }
                 }
             }
             .padding(14)
@@ -219,14 +239,17 @@ struct ScannerAddView: View {
             if mode == .add {
                 collection.add(id)
                 lastWasNoop = false
+                undoAction = UndoAction(id: id, mode: .add)
                 SoundManager.playAdded()
             } else {
                 if currentCount > 0 {
                     collection.remove(id)
                     lastWasNoop = false
+                    undoAction = UndoAction(id: id, mode: .remove)
                     SoundManager.playRemoved()
                 } else {
                     lastWasNoop = true
+                    undoAction = nil
                     SoundManager.playNoOp()
                 }
             }
@@ -235,5 +258,21 @@ struct ScannerAddView: View {
                 lastScannedID = id
             }
         }
+    }
+
+    private func performUndo() {
+        guard let action = undoAction else { return }
+
+        if action.mode == .add {
+            if collection.count(for: action.id) > 0 {
+                collection.remove(action.id)
+                SoundManager.playRemoved()
+            }
+        } else {
+            collection.add(action.id)
+            SoundManager.playAdded()
+        }
+
+        undoAction = nil
     }
 }
