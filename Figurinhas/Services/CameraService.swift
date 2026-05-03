@@ -49,7 +49,7 @@ final class CameraService: NSObject, ObservableObject {
     private static let glueRegex: NSRegularExpression? =
         try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})(\d{1,2})(?!\d)"#)
     private static let spacedRegex: NSRegularExpression? =
-        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})\s*([0-9]{1,2})(?![0-9])"#)
+        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})\s*([0-9ILOSB\|]{1,2})(?![0-9])"#)
 
     // Center strip of the frame (normalized, Vision origin = bottom-left).
     // Focusing here avoids wasting time on background clutter at the edges.
@@ -193,7 +193,8 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                     let cr = Range(m.range(at: 1), in: text),
                     let nr = Range(m.range(at: 2), in: text)
                 else { continue }
-                let id = "\(text[cr])\(text[nr])"
+                let number = normalizeOCRNumberToken(String(text[nr]))
+                let id = "\(text[cr])\(number)"
                 if StickerData.validIDs.contains(id) { return id }
             }
         }
@@ -226,24 +227,26 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 let next = tokens[i + 1]
 
                 // Case A: next token is already a 2-digit number ("PAN" + "19")
-                if next.count == 2, next.allSatisfy(\.isNumber) {
-                    let id = "\(code)\(next)"
+                let normalizedNext = normalizeOCRNumberToken(next)
+                if normalizedNext.count == 2, normalizedNext.allSatisfy(\.isNumber) {
+                    let id = "\(code)\(normalizedNext)"
                     if StickerData.validIDs.contains(id) { return id }
                 }
 
                 // Case B: next token is 1 digit + token after is 1 digit
                 // We only combine within the same OCR observation line.
-                if next.count == 1, next.allSatisfy(\.isNumber), i + 2 < tokens.count {
+                if normalizedNext.count == 1, normalizedNext.allSatisfy(\.isNumber), i + 2 < tokens.count {
                     let after = tokens[i + 2]
-                    if after.count == 1, after.allSatisfy(\.isNumber) {
-                        let id = "\(code)\(next)\(after)"
+                    let normalizedAfter = normalizeOCRNumberToken(after)
+                    if normalizedAfter.count == 1, normalizedAfter.allSatisfy(\.isNumber) {
+                        let id = "\(code)\(normalizedNext)\(normalizedAfter)"
                         if StickerData.validIDs.contains(id) { return id }
                     }
                 }
 
                 // Case C: next token is a single-digit number (true 1-digit sticker)
-                if next.count == 1, next.allSatisfy(\.isNumber) {
-                    let id = "\(code)\(next)"
+                if normalizedNext.count == 1, normalizedNext.allSatisfy(\.isNumber) {
+                    let id = "\(code)\(normalizedNext)"
                     if StickerData.validIDs.contains(id) { return id }
                 }
             }
@@ -267,5 +270,20 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
             if StickerData.validIDs.contains(id) { return id }
         }
         return nil
+    }
+
+    /// Converts common OCR confusions in numeric tokens.
+    /// Example: "I" -> "1", "l" -> "1", "|" -> "1", "O" -> "0".
+    private func normalizeOCRNumberToken(_ raw: String) -> String {
+        let upper = raw.uppercased()
+        return String(upper.map { ch in
+            switch ch {
+            case "I", "L", "|": return "1"
+            case "O": return "0"
+            case "S": return "5"
+            case "B": return "8"
+            default: return ch
+            }
+        })
     }
 }
