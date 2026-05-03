@@ -293,12 +293,14 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     /// Converts common OCR confusions in country codes.
-    /// Example: "CR0" -> "CRO".
+    /// Example: "CR0" -> "CRO", "SU1" -> "SUI", "5UI" -> "SUI".
     private func normalizeOCRCodeToken(_ raw: String) -> String {
         let upper = raw.uppercased()
         return String(upper.map { ch in
             switch ch {
             case "0": return "O"
+            case "1", "L", "|": return "I"
+            case "5": return "S"
             default: return ch
             }
         })
