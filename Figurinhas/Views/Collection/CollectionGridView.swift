@@ -17,6 +17,10 @@ struct CollectionGridView: View {
     @State private var searchText = ""
     @State private var showExportOptions = false
     @State private var sharePayload: SharePayload?
+    @State private var showImportAlert = false
+    @State private var importText = ""
+    @State private var importResultMessage = ""
+    @State private var showImportResult = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 5)
 
@@ -57,17 +61,51 @@ struct CollectionGridView: View {
             .background(Color(.systemBackground))
             .navigationTitle("Coleção")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Importar") {
+                        importText = ""
+                        showImportAlert = true
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showExportOptions = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+            }
             .confirmationDialog("Exportar figurinhas", isPresented: $showExportOptions, titleVisibility: .visible) {
                 Button("Todas") {
-                    sharePayload = SharePayload(text: buildExportText(repeatedOnly: false))
+                    sharePayload = SharePayload(text: buildExportText(mode: .allOwned))
                 }
                 Button("Repetidas") {
-                    sharePayload = SharePayload(text: buildExportText(repeatedOnly: true))
+                    sharePayload = SharePayload(text: buildExportText(mode: .duplicatesOnly))
+                }
+                Button("Faltando") {
+                    sharePayload = SharePayload(text: buildExportText(mode: .missingOnly))
                 }
                 Button("Cancelar", role: .cancel) {}
             }
             .sheet(item: $sharePayload) { payload in
                 ShareSheet(items: [payload.text])
+            }
+            .alert("Importar figurinhas", isPresented: $showImportAlert) {
+                TextField("Ex.: MEX 4, PAN 1, FWC 00", text: $importText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                Button("Cancelar", role: .cancel) {}
+                Button("Importar") {
+                    importFromText(importText)
+                }
+            } message: {
+                Text("Cole a lista no mesmo formato da exportação.")
+            }
+            .alert("Importação concluída", isPresented: $showImportResult) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importResultMessage)
             }
         }
     }
@@ -75,28 +113,16 @@ struct CollectionGridView: View {
     // MARK: - Stats banner
 
     private var searchAndExportBar: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Buscar por país, sigla ou número", text: $searchText)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-
-            Button {
-                showExportOptions = true
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: 42, height: 42)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Buscar por país, sigla ou número", text: $searchText)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var statsBanner: some View {
@@ -324,18 +350,72 @@ struct CollectionGridView: View {
             .replacingOccurrences(of: " ", with: "")
     }
 
-    private func buildExportText(repeatedOnly: Bool) -> String {
+    private func buildExportText(mode: ExportMode) -> String {
         let parts = StickerData.groups
             .flatMap(\.sections)
             .flatMap { section in
                 section.stickers.compactMap { sticker -> String? in
                     let c = collection.count(for: sticker.id)
-                    guard c > 0 else { return nil }
-                    if repeatedOnly && c <= 1 { return nil }
+                    switch mode {
+                    case .allOwned:
+                        guard c > 0 else { return nil }
+                    case .duplicatesOnly:
+                        guard c > 1 else { return nil }
+                    case .missingOnly:
+                        guard c == 0 else { return nil }
+                    }
                     return "\(sticker.code) \(sticker.number)"
                 }
             }
         return parts.joined(separator: ", ")
+    }
+
+    private func importFromText(_ raw: String) {
+        let parts = raw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+            .filter { !$0.isEmpty }
+
+        var imported = 0
+        var ignored = 0
+
+        for part in parts {
+            let tokens = part
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map(String.init)
+
+            guard tokens.count >= 2 else {
+                ignored += 1
+                continue
+            }
+
+            let code = tokens[0]
+            let number = normalizeImportedNumber(tokens[1], for: code)
+            let id = "\(code)\(number)"
+
+            guard StickerData.validIDs.contains(id) else {
+                ignored += 1
+                continue
+            }
+
+            collection.add(id)
+            imported += 1
+        }
+
+        importResultMessage = "Adicionadas: \(imported) • Ignoradas: \(ignored)"
+        showImportResult = true
+    }
+
+    private func normalizeImportedNumber(_ numberRaw: String, for code: String) -> String {
+        let digits = numberRaw.filter(\.isNumber)
+        guard !digits.isEmpty else { return numberRaw }
+
+        if code == "FWC" {
+            if digits == "0" || digits == "00" { return "00" }
+            return String(Int(digits) ?? 0)
+        }
+
+        return String(Int(digits) ?? 0)
     }
 
     private func hasVisibleStickers(_ country: CountrySection) -> Bool {
@@ -364,4 +444,10 @@ private struct ShareSheet: UIViewControllerRepresentable {
 private struct SharePayload: Identifiable {
     let id = UUID()
     let text: String
+}
+
+private enum ExportMode {
+    case allOwned
+    case duplicatesOnly
+    case missingOnly
 }
