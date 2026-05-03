@@ -49,7 +49,7 @@ final class CameraService: NSObject, ObservableObject {
     private static let glueRegex: NSRegularExpression? =
         try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})(\d{1,2})(?!\d)"#)
     private static let spacedRegex: NSRegularExpression? =
-        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})\s*([0-9ILOSB\|]{1,2})(?![0-9])"#)
+        try? NSRegularExpression(pattern: #"(?<![A-Z])([A-Z]{2,3})(?:\s+|[-_:])([0-9ILOSB\|]{1,2})(?![0-9A-Z])"#)
 
     // Center strip of the frame (normalized, Vision origin = bottom-left).
     // Focusing here avoids wasting time on background clutter at the edges.
