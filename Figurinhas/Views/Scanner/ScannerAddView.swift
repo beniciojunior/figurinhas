@@ -127,7 +127,7 @@ struct ScannerAddView: View {
                     } label: {
                         Text("Desfazer")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(undoAction == nil ? .secondary : .teal)
+                            .foregroundStyle(undoAction == nil ? Color.secondary : Color.teal)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .background((undoAction == nil ? Color.gray : Color.teal).opacity(0.18), in: Capsule())
