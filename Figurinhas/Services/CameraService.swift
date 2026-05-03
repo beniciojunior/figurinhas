@@ -182,44 +182,46 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
     /// being returned when the actual sticker is "PAN 19" and the OCR emitted
     /// the digits as two separate tokens ("1" and "9").
     private func findViaTokens(in texts: [String]) -> String? {
-        let tokens = texts
-            .joined(separator: " ")
-            .uppercased()
-            .components(separatedBy: .whitespaces)
-            .filter { !$0.isEmpty }
+        for raw in texts {
+            let normalized = raw.uppercased()
+            let tokens = normalized
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map(String.init)
+                .filter { !$0.isEmpty }
 
-        for i in 0 ..< tokens.count {
-            let token = tokens[i]
+            for i in 0 ..< tokens.count {
+                let token = tokens[i]
 
-            // Must be 2–3 purely alphabetic uppercase chars to be a sticker code
-            guard (2...3).contains(token.count),
-                  token.unicodeScalars.allSatisfy({ CharacterSet.uppercaseLetters.contains($0) })
-            else { continue }
+                // Must be 2–3 purely alphabetic uppercase chars to be a sticker code
+                guard (2...3).contains(token.count),
+                      token.unicodeScalars.allSatisfy({ CharacterSet.uppercaseLetters.contains($0) })
+                else { continue }
 
-            let code = token
-            guard i + 1 < tokens.count else { continue }
-            let next = tokens[i + 1]
+                let code = token
+                guard i + 1 < tokens.count else { continue }
+                let next = tokens[i + 1]
 
-            // Case A: next token is already a 2-digit number ("PAN" + "19")
-            if next.count == 2, next.allSatisfy(\.isNumber) {
-                let id = "\(code)\(next)"
-                if StickerData.validIDs.contains(id) { return id }
-            }
-
-            // Case B: next token is 1 digit + the token after is also 1 digit
-            // → combine them ("PAN" + "1" + "9" → "PAN19")
-            if next.count == 1, next.allSatisfy(\.isNumber), i + 2 < tokens.count {
-                let after = tokens[i + 2]
-                if after.count == 1, after.allSatisfy(\.isNumber) {
-                    let id = "\(code)\(next)\(after)"
+                // Case A: next token is already a 2-digit number ("PAN" + "19")
+                if next.count == 2, next.allSatisfy(\.isNumber) {
+                    let id = "\(code)\(next)"
                     if StickerData.validIDs.contains(id) { return id }
                 }
-            }
 
-            // Case C: next token is a single-digit number (true 1-digit sticker)
-            if next.count == 1, next.allSatisfy(\.isNumber) {
-                let id = "\(code)\(next)"
-                if StickerData.validIDs.contains(id) { return id }
+                // Case B: next token is 1 digit + token after is 1 digit
+                // We only combine within the same OCR observation line.
+                if next.count == 1, next.allSatisfy(\.isNumber), i + 2 < tokens.count {
+                    let after = tokens[i + 2]
+                    if after.count == 1, after.allSatisfy(\.isNumber) {
+                        let id = "\(code)\(next)\(after)"
+                        if StickerData.validIDs.contains(id) { return id }
+                    }
+                }
+
+                // Case C: next token is a single-digit number (true 1-digit sticker)
+                if next.count == 1, next.allSatisfy(\.isNumber) {
+                    let id = "\(code)\(next)"
+                    if StickerData.validIDs.contains(id) { return id }
+                }
             }
         }
         return nil
