@@ -1,5 +1,9 @@
 # Figurinhas da Copa — Prompt Final Completo
 
+## Preview do projeto rodando
+
+![Print do app rodando](assets/images/projeto-rodando.png)
+
 Crie um app iOS em **SwiftUI**, orientação **portrait (mobile)**, com design caprichado usando componentes nativos do SwiftUI e visual iOS moderno (incluindo materiais/efeitos atuais no estilo Liquid Glass), com suporte a **Light Mode** e **Dark Mode**.
 
 O app é um controle de figurinhas da Copa do Mundo, com persistência local da coleção do usuário e scanner por OCR.
