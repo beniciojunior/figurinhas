@@ -63,7 +63,7 @@ struct StickerCardView: View {
     }
 
     private var duplicateBadge: some View {
-        Text("×\(count)")
+        Text("+\(count - 1)")
             .font(.system(size: 8, weight: .black))
             .foregroundStyle(.white)
             .padding(.horizontal, 3)
