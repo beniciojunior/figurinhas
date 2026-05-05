@@ -176,8 +176,12 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         if let id = findViaLineRegex(in: texts) { return id }
         // Primary strategy: token-based — more resilient to OCR splitting "19" → "1" + "9"
         if let id = findViaTokens(in: texts) { return id }
+        let joined = texts.joined(separator: " ").uppercased()
         // Fallback: regex on the joined string (handles code+number glued without space)
-        return findViaRegex(in: texts.joined(separator: " ").uppercased())
+        if let id = findViaRegex(in: joined) { return id }
+        // Cross-observation fallback: code and number may be in separate OCR observations
+        // ("SUI" in one line, "13" in another). Apply spaced regex to the joined text.
+        return findViaLineRegex(in: [joined])
     }
 
     private func findViaLineRegex(in texts: [String]) -> String? {
@@ -293,7 +297,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     /// Converts common OCR confusions in country codes.
-    /// Example: "CR0" -> "CRO", "SU1" -> "SUI", "5UI" -> "SUI".
+    /// Example: "CR0" -> "CRO", "SU1" -> "SUI", "5UI" -> "SUI", "E6Y" -> "EGY".
     private func normalizeOCRCodeToken(_ raw: String) -> String {
         let upper = raw.uppercased()
         return String(upper.map { ch in
@@ -301,6 +305,8 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
             case "0": return "O"
             case "1", "|": return "I"
             case "5": return "S"
+            case "6": return "G"
+            case "8": return "B"
             default: return ch
             }
         })
