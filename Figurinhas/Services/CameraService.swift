@@ -146,39 +146,27 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        // Try normal image first; if no match, retry with inverted colors so that
-        // light-text-on-dark-background stickers (e.g. SUI 13) are also detected.
-        var id = recognizeID(in: .init(cvPixelBuffer: pixelBuffer), orientation: .up)
-        if id == nil {
-            let inverted = CIImage(cvPixelBuffer: pixelBuffer).applyingFilter("CIColorInvert")
-            id = recognizeID(in: inverted, orientation: .up)
-        }
-
-        guard let id else { return }
-        // Already dispatched this ID — drop until resetLastFound() is called.
-        // This runs on recognizerQ (serial), so the check+write is atomic.
-        guard id != lastDispatchedID else { return }
-        lastDispatchedID = id
-        DispatchQueue.main.async { self.onStickerFound?(id) }
-    }
-
-    private func recognizeID(in ciImage: CIImage, orientation: CGImagePropertyOrientation) -> String? {
-        var result: String?
         let req = VNRecognizeTextRequest { [weak self] request, _ in
             guard let self else { return }
             let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
             let strings = observations.compactMap { $0.topCandidates(1).first?.string }
-            result = self.findStickerID(in: strings)
+            guard let id = self.findStickerID(in: strings) else { return }
+
+            // Already dispatched this ID — drop until resetLastFound() is called.
+            // This runs on recognizerQ (serial), so the check+write is atomic.
+            guard id != self.lastDispatchedID else { return }
+            self.lastDispatchedID = id
+
+            DispatchQueue.main.async { self.onStickerFound?(id) }
         }
         req.recognitionLevel = .fast
         req.usesLanguageCorrection = false
-        req.recognitionLanguages = ["en-US"]
-        req.minimumTextHeight = 0.02
+        req.recognitionLanguages = ["en-US"]   // skip multi-language detection
+        req.minimumTextHeight = 0.02           // ignore very small text (faster)
         req.regionOfInterest = CameraService.roi
 
-        let handler = VNImageRequestHandler(ciImage: ciImage, orientation: orientation)
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
         try? handler.perform([req])
-        return result
     }
 
     // MARK: - Pattern matching
