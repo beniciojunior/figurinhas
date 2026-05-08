@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0E26901C5CF4B6EA1A6F2042 /* StickerCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9605D40CABE3FBDDC17B8E /* StickerCardView.swift */; };
 		11E332560A0B03361B14A348 /* StickerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E5CD75CF3CE65BC313F0DB7 /* StickerModels.swift */; };
+		1772DC5BD3E8CA7420EE9CFC /* QrCodeUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1A472E20F2DBB37928A8E1 /* QrCodeUtils.swift */; };
 		2324F324035AE901C0D15376 /* StickerFoundSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B212C7FB260DFE21BA4D594A /* StickerFoundSheet.swift */; };
 		2B83B5B9790292E1D2B9E20E /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA1D2160F715E170D975627 /* CameraService.swift */; };
 		3E499F43448405D73C5C76FD /* ScannerCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1808421C7A38CFC4FFEB7A1E /* ScannerCheckView.swift */; };
@@ -32,6 +33,7 @@
 		965BCBCC07BDE29108A646ED /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
 		A63BA77E698EEA1315CD4BF6 /* Figurinhas.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Figurinhas.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B212C7FB260DFE21BA4D594A /* StickerFoundSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickerFoundSheet.swift; sourceTree = "<group>"; };
+		BC1A472E20F2DBB37928A8E1 /* QrCodeUtils.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QrCodeUtils.swift; sourceTree = "<group>"; };
 		BF8C5972ABEB7FA46934E4A8 /* ScannerAddView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerAddView.swift; sourceTree = "<group>"; };
 		C0738786B9AD1F9B4C86ED1B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DF6CD743B38C6615DC060C37 /* CollectionGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionGridView.swift; sourceTree = "<group>"; };
@@ -54,6 +56,7 @@
 			children = (
 				E00FD481124472428E84F791 /* StickerCollection.swift */,
 				0E5CD75CF3CE65BC313F0DB7 /* StickerModels.swift */,
+				BC1A472E20F2DBB37928A8E1 /* QrCodeUtils.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -138,8 +141,6 @@
 			dependencies = (
 			);
 			name = Figurinhas;
-			packageProductDependencies = (
-			);
 			productName = Figurinhas;
 			productReference = A63BA77E698EEA1315CD4BF6 /* Figurinhas.app */;
 			productType = "com.apple.product-type.application";
@@ -199,6 +200,7 @@
 				504032FF7F5B6C79CBD4743A /* StickerCollection.swift in Sources */,
 				2324F324035AE901C0D15376 /* StickerFoundSheet.swift in Sources */,
 				11E332560A0B03361B14A348 /* StickerModels.swift in Sources */,
+				1772DC5BD3E8CA7420EE9CFC /* QrCodeUtils.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
