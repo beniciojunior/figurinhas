@@ -32,8 +32,17 @@ final class CameraService: NSObject, ObservableObject {
 
     let session = AVCaptureSession()
 
+    enum ScanMode { case sticker, qr }
+
     /// Called on main thread when a valid sticker ID is recognized.
     var onStickerFound: ((String) -> Void)?
+
+    /// Called on main thread when a QR code payload is recognized.
+    var onQRFound: ((String) -> Void)?
+
+    var scanMode: ScanMode = .sticker {
+        didSet { recognizerQ.async { self.lastDispatchedID = nil } }
+    }
 
     private let sessionQ    = DispatchQueue(label: "cam.session",    qos: .userInitiated)
     private let recognizerQ = DispatchQueue(label: "cam.recognize", qos: .userInitiated)
@@ -145,6 +154,22 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         lastProcess = now
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        if scanMode == .qr {
+            let req = VNDetectBarcodesRequest { [weak self] request, _ in
+                guard let self else { return }
+                guard let obs = (request.results as? [VNBarcodeObservation])?
+                    .first(where: { $0.symbology == .qr }),
+                      let payload = obs.payloadStringValue,
+                      payload != self.lastDispatchedID else { return }
+                self.lastDispatchedID = payload
+                DispatchQueue.main.async { self.onQRFound?(payload) }
+            }
+            req.symbologies = [.qr]
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
+            try? handler.perform([req])
+            return
+        }
 
         let req = VNRecognizeTextRequest { [weak self] request, _ in
             guard let self else { return }
