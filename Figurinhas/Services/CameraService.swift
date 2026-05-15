@@ -49,6 +49,11 @@ final class CameraService: NSObject, ObservableObject {
     private var lastProcess: Date = .distantPast
     private let throttle: TimeInterval = 0.12   // ~8 fps recognition
 
+    // Minimum interval between dispatching scan results to the view.
+    // Guarded exclusively on recognizerQ (serial) — thread-safe read/write.
+    var dispatchCooldown: TimeInterval = 2.0
+    private var lastDispatchedDate: Date = .distantPast
+
     // Last sticker ID dispatched to the main thread.
     // Guarded exclusively on recognizerQ — prevents double-firing the same ID
     // even if two OCR completions arrive before the view updates its own state.
@@ -137,7 +142,10 @@ final class CameraService: NSObject, ObservableObject {
     /// Clears the last-dispatched guard so the same sticker can fire again.
     /// Call this when the user explicitly asks to re-scan (e.g. taps "Limpar").
     func resetLastFound() {
-        recognizerQ.async { [weak self] in self?.lastDispatchedID = nil }
+        recognizerQ.async { [weak self] in
+            self?.lastDispatchedID = nil
+            self?.lastDispatchedDate = .distantPast
+        }
     }
 }
 
@@ -160,9 +168,12 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 guard let self else { return }
                 guard let obs = (request.results as? [VNBarcodeObservation])?
                     .first(where: { $0.symbology == .qr }),
-                      let payload = obs.payloadStringValue,
-                      payload != self.lastDispatchedID else { return }
+                      let payload = obs.payloadStringValue else { return }
+                let now = Date()
+                guard payload != self.lastDispatchedID,
+                      now.timeIntervalSince(self.lastDispatchedDate) >= self.dispatchCooldown else { return }
                 self.lastDispatchedID = payload
+                self.lastDispatchedDate = now
                 DispatchQueue.main.async { self.onQRFound?(payload) }
             }
             req.symbologies = [.qr]
@@ -177,10 +188,11 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
             let strings = observations.compactMap { $0.topCandidates(1).first?.string }
             guard let id = self.findStickerID(in: strings) else { return }
 
-            // Already dispatched this ID — drop until resetLastFound() is called.
-            // This runs on recognizerQ (serial), so the check+write is atomic.
-            guard id != self.lastDispatchedID else { return }
+            let now = Date()
+            guard id != self.lastDispatchedID,
+                  now.timeIntervalSince(self.lastDispatchedDate) >= self.dispatchCooldown else { return }
             self.lastDispatchedID = id
+            self.lastDispatchedDate = now
 
             DispatchQueue.main.async { self.onStickerFound?(id) }
         }

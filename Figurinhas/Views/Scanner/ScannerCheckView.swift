@@ -372,7 +372,6 @@ struct ScannerCheckView: View {
     private func attachStickerHandler() {
         camera.onQRFound = nil
         camera.onStickerFound = { id in
-            guard id != lastID else { return }
             let hasIt = collection.count(for: id) > 0
             if hasIt { SoundManager.playHasSticker() } else { SoundManager.playMissingSticker() }
             withAnimation(.spring(duration: 0.35)) { lastID = id }

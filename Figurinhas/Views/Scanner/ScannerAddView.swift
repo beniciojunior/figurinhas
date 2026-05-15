@@ -10,7 +10,8 @@ struct ScannerAddView: View {
     @State private var mode: ScannerMode = .add
     @State private var lastScannedID: String? = nil
     @State private var lastWasNoop = false
-    @State private var undoAction: UndoAction? = nil
+    @State private var undoStack: [UndoAction] = []
+    @State private var pendingRestoreID: String? = nil
 
     private struct UndoAction {
         let id: String
@@ -40,6 +41,13 @@ struct ScannerAddView: View {
         .onChange(of: mode) {
             lastScannedID = nil
             camera.resetLastFound()
+        }
+        .onChange(of: lastScannedID) { _, newValue in
+            guard newValue == nil, let id = pendingRestoreID else { return }
+            pendingRestoreID = nil
+            withAnimation(.spring(duration: 0.35)) {
+                lastScannedID = id
+            }
         }
     }
 
@@ -127,14 +135,16 @@ struct ScannerAddView: View {
                     } label: {
                         Text("Desfazer")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(undoAction == nil ? Color.secondary : Color.teal)
+                            .foregroundStyle(undoStack.isEmpty ? Color.secondary : Color.teal)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background((undoAction == nil ? Color.gray : Color.teal).opacity(0.18), in: Capsule())
+                            .background((undoStack.isEmpty ? Color.gray : Color.teal).opacity(0.18), in: Capsule())
                     }
-                    .disabled(undoAction == nil)
+                    .disabled(undoStack.isEmpty)
 
                     Button {
+                        undoStack.removeAll()
+                        pendingRestoreID = nil
                         camera.resetLastFound()
                         withAnimation(.spring(duration: 0.3)) { lastScannedID = nil }
                     } label: {
@@ -231,25 +241,21 @@ struct ScannerAddView: View {
 
     private func attachHandler() {
         camera.onStickerFound = { id in
-            // Ignore if same sticker as last scanned (until Limpar is tapped)
-            guard id != lastScannedID else { return }
-
             let currentCount = collection.count(for: id)
 
             if mode == .add {
                 collection.add(id)
                 lastWasNoop = false
-                undoAction = UndoAction(id: id, mode: .add)
+                undoStack.append(UndoAction(id: id, mode: .add))
                 SoundManager.playAdded()
             } else {
                 if currentCount > 0 {
                     collection.remove(id)
                     lastWasNoop = false
-                    undoAction = UndoAction(id: id, mode: .remove)
+                    undoStack.append(UndoAction(id: id, mode: .remove))
                     SoundManager.playRemoved()
                 } else {
                     lastWasNoop = true
-                    undoAction = nil
                     SoundManager.playNoOp()
                 }
             }
@@ -261,7 +267,8 @@ struct ScannerAddView: View {
     }
 
     private func performUndo() {
-        guard let action = undoAction else { return }
+        guard let action = undoStack.last else { return }
+        undoStack.removeLast()
 
         if action.mode == .add {
             if collection.count(for: action.id) > 0 {
@@ -273,6 +280,10 @@ struct ScannerAddView: View {
             SoundManager.playAdded()
         }
 
-        undoAction = nil
+        lastWasNoop = false
+        pendingRestoreID = undoStack.last?.id
+        withAnimation(.spring(duration: 0.3)) {
+            lastScannedID = nil
+        }
     }
 }
